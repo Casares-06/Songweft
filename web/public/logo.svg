@@ -1,7 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
-  <title id="title">PULSE</title>
-  <desc id="desc">Una letra P atravesada por una onda de audio</desc>
+  <title id="title">Songweft</title>
+  <desc id="desc">Tres líneas musicales que se entrelazan</desc>
   <rect width="64" height="64" rx="18" fill="#D8FF3E"/>
-  <path d="M19 47V17h17c8.8 0 14 5.2 14 13s-5.2 13-14 13H27" fill="none" stroke="#08080B" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M24 30h5l2.8-6.5 4.4 14 3.2-7.5H48" fill="none" stroke="#08080B" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M12 20c11 0 11 24 22 24s11-24 22-24M12 32c11 0 11-12 22-12s11 24 22 24M12 44c11 0 11-24 22-24s11 12 22 12" fill="none" stroke="#08080B" stroke-width="4" stroke-linecap="round"/>
 </svg>

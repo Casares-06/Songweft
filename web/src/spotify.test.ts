@@ -42,8 +42,8 @@ describe("importación privada de Spotify", () => {
     await expect(processSpotifyExport(new Blob([bytes]))).rejects.toThrow(/ruta no segura/i);
   });
 
-  it.skipIf(!process.env.PULSE_TEST_ZIP)("procesa una exportación real sin escribirla", async () => {
-    const path = process.env.PULSE_TEST_ZIP!;
+  it.skipIf(!process.env.SONGWEFT_TEST_ZIP)("procesa una exportación real sin escribirla", async () => {
+    const path = process.env.SONGWEFT_TEST_ZIP!;
     const bytes = new Uint8Array(await readFile(path));
     const result = await processSpotifyExport(Object.assign(new Blob([bytes]), { name: basename(path) }));
     expect(result.plays.length).toBeGreaterThan(1_000);

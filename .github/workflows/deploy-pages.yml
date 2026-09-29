@@ -1,4 +1,4 @@
-name: Deploy PULSE to GitHub Pages
+name: Deploy Songweft to GitHub Pages
 
 on:
   push:

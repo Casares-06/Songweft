@@ -1,5 +1,5 @@
 @echo off
-title Pulse - Spotify Stats
+title Songweft - Spotify Stats
 cd /d "%~dp0"
 
 if not exist ".venv\Scripts\python.exe" (
@@ -11,4 +11,3 @@ if not exist ".venv\Scripts\python.exe" (
 
 ".venv\Scripts\python.exe" -m streamlit run "app.py"
 pause
-

@@ -24,6 +24,14 @@ export interface SpotifyRecord {
   [key: string]: unknown;
 }
 
+export interface LibraryTrack {
+  uri: string;
+  item: string;
+  creator: string;
+  collection: string;
+  sourceFile: string;
+}
+
 export interface Play {
   id: number;
   at: Date;
@@ -54,6 +62,7 @@ export interface Play {
 
 export interface ImportResult {
   plays: Play[];
+  libraryTracks?: LibraryTrack[];
   rawAudioRecords: number;
   duplicateRecords: number;
   invalidRecords: number;

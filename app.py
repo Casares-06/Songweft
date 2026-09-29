@@ -1,4 +1,4 @@
-"""Punto de entrada de la aplicación Pulse."""
+"""Punto de entrada de la aplicación Songweft."""
 
 import runpy
 import sys

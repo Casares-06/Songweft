@@ -35,7 +35,7 @@ PLOT_COLORS = [GREEN, PURPLE, BLUE, PINK, LIME, "#FB923C"]
 
 
 st.set_page_config(
-    page_title="Pulse — Spotify Stats",
+    page_title="Songweft — Spotify Stats",
     page_icon="🎧",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -144,7 +144,7 @@ def render_hero(frame: pd.DataFrame) -> None:
         f"""
         <div class="hero">
             <div class="hero-kicker">Tu archivo musical · privado y local</div>
-            <div class="hero-title">PULSE</div>
+            <div class="hero-title">SONGWEFT</div>
             <p class="hero-subtitle">Tu forma de escuchar, convertida en una historia de tiempo, artistas, canciones y hábitos.</p>
             <div class="hero-badges">
                 <span class="hero-badge">{metric_number(frame['minutes_played'].sum())} minutos</span>
@@ -581,7 +581,7 @@ def main() -> None:
     report = load_quality(QUALITY_PATH)
 
     with st.sidebar:
-        st.markdown("## 🎧 PULSE")
+        st.markdown("## 🎧 SONGWEFT")
         st.caption("Tu archivo musical personal")
         page = st.radio(
             "Navegación",
