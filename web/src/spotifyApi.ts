@@ -3,6 +3,7 @@ const AUTHORIZE = "https://accounts.spotify.com/authorize";
 const TOKEN = "https://accounts.spotify.com/api/token";
 const API = "https://api.spotify.com/v1";
 import type { LibraryTrack } from "./types";
+import { trackNameKey } from "./playlist";
 
 interface Session { clientId: string; accessToken?: string; refreshToken?: string; expiresAt?: number; verifier?: string; state?: string }
 
@@ -154,22 +155,41 @@ export async function importSpotifyPlaylist(url: string, onProgress?: (message: 
   return tracks;
 }
 
-export async function exploreArtistCatalog(artistName: string, knownUris: Set<string>): Promise<LibraryTrack[]> {
-  const found = await request(`/search?q=${encodeURIComponent(`artist:${artistName}`)}&type=artist&limit=5`);
-  const artist = found.artists?.items?.find((item: { name: string }) => item.name.toLowerCase() === artistName.toLowerCase());
+export async function searchSpotifyArtists(query: string): Promise<{ id: string; name: string }[]> {
+  if (!query.trim()) return [];
+  const found = await request(`/search?q=${encodeURIComponent(query.trim())}&type=artist&limit=10`);
+  return (found.artists?.items ?? []).map((artist: { id: string; name: string }) => ({ id: artist.id, name: artist.name }));
+}
+
+export async function exploreArtistCatalog(artistName: string, knownUris: Set<string>, knownNames = new Set<string>(), artistId?: string, maxTracks = 24): Promise<LibraryTrack[]> {
+  const found = artistId ? null : await request(`/search?q=${encodeURIComponent(`artist:${artistName}`)}&type=artist&limit=5`);
+  const artist = artistId ? { id: artistId } : found.artists?.items?.find((item: { name: string }) => item.name.toLowerCase() === artistName.toLowerCase());
   if (!artist) throw new Error(`No se encontró a ${artistName} en Spotify.`);
-  const albums = await request(`/artists/${artist.id}/albums?include_groups=album,single&limit=8`);
   const suggestions: LibraryTrack[] = [];
   const seen = new Set<string>();
-  for (const album of (albums.items ?? []).slice(0, 5)) {
-    const page = await request(`/albums/${album.id}/tracks?limit=50`);
-    for (const entry of page.items ?? []) {
-      const track = asLibraryTrack({ ...entry, album: { name: album.name } }, "Spotify · Discografía");
-      if (!track || knownUris.has(track.uri) || seen.has(track.uri)) continue;
-      seen.add(track.uri);
-      suggestions.push(track);
-      if (suggestions.length >= 24) return suggestions;
+  const target = Math.min(300, Math.max(1, maxTracks));
+  for (let albumOffset = 0; albumOffset < 100; albumOffset += 20) {
+    const albums = await request(`/artists/${artist.id}/albums?include_groups=album,single&limit=20&offset=${albumOffset}`);
+    for (const album of albums.items ?? []) {
+      let trackOffset = 0;
+      while (true) {
+        const page = await request(`/albums/${album.id}/tracks?limit=50&offset=${trackOffset}`);
+        for (const entry of page.items ?? []) {
+          if (!entry.artists?.some((credit: { id: string }) => credit.id === artist.id)) continue;
+          const track = asLibraryTrack({ ...entry, album: { name: album.name } }, "Spotify · Discografía");
+          if (!track) continue;
+          const nameKey = trackNameKey(artistName, track.item);
+          const heardByName = knownNames.has(nameKey) || entry.artists.some((credit: { name: string }) => knownNames.has(trackNameKey(credit.name, track.item)));
+          if (knownUris.has(track.uri) || heardByName || seen.has(track.uri) || seen.has(nameKey)) continue;
+          seen.add(track.uri); seen.add(nameKey);
+          suggestions.push(track);
+          if (suggestions.length >= target) return suggestions;
+        }
+        if (!page.next || !page.items?.length) break;
+        trackOffset += page.items.length;
+      }
     }
+    if (!albums.next || !albums.items?.length) break;
   }
   return suggestions;
 }

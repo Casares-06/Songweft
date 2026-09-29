@@ -39,26 +39,27 @@ import {
 import { importSources, mergeImportResults, parsePastedTracks } from "./sources";
 import Studio from "./Studio";
 import Wrapped from "./Wrapped";
+import { CountUp, MusicMotion } from "./Motion";
 import { connectSpotify, disconnectSpotify, finishSpotifyLogin, importSavedSpotifyTracks, importSpotifyPlaylist, listenForSpotifyConnection, spotifyConnected } from "./spotifyApi";
 import type { ImportResult, LibraryTrack, Play, RankingRow } from "./types";
 
-type Page = "Resumen" | "Rankings" | "Historia" | "Hábitos" | "Sesiones" | "Descubrimiento" | "Podcasts" | "Explorar" | "Fuentes" | "Estudio" | "Tarjeta" | "Conexiones" | "Calidad" | "Información";
+type Page = "Inicio" | "Visualizar" | "Crear" | "Compartir" | "Fuentes" | "Información";
+type View = "Resumen" | "Rankings" | "Historia" | "Hábitos" | "Sesiones" | "Descubrimiento" | "Podcasts" | "Explorar" | "Calidad";
 
 const pages: { name: Page; icon: typeof Activity }[] = [
-  { name: "Resumen", icon: Activity },
-  { name: "Rankings", icon: BarChart3 },
-  { name: "Historia", icon: History },
-  { name: "Hábitos", icon: Clock3 },
-  { name: "Sesiones", icon: Flame },
-  { name: "Descubrimiento", icon: Compass },
-  { name: "Podcasts", icon: Podcast },
-  { name: "Explorar", icon: Search },
+  { name: "Inicio", icon: Activity },
+  { name: "Visualizar", icon: BarChart3 },
+  { name: "Crear", icon: ListMusic },
+  { name: "Compartir", icon: Share2 },
   { name: "Fuentes", icon: FileArchive },
-  { name: "Estudio", icon: ListMusic },
-  { name: "Tarjeta", icon: Share2 },
-  { name: "Conexiones", icon: DatabaseZap },
-  { name: "Calidad", icon: ShieldCheck },
   { name: "Información", icon: Info },
+];
+const viewGroups: { name: string; views: View[] }[] = [
+  { name: "Panorama", views: ["Resumen"] },
+  { name: "Favoritos", views: ["Rankings", "Historia"] },
+  { name: "Tu ritmo", views: ["Hábitos", "Sesiones"] },
+  { name: "Descubrir", views: ["Descubrimiento", "Podcasts"] },
+  { name: "Detalle", views: ["Explorar", "Calidad"] },
 ];
 
 const number = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 0 });
@@ -445,38 +446,59 @@ function PageTitle({ eyebrow, title, copy }: { eyebrow: string; title: string; c
 }
 
 function Dashboard({ result, onReset, onAdd, onAddLibrary, busy, progress, error, connected, onConnect, onDisconnect }: { result: ImportResult; onReset: () => void; onAdd: (files: File[]) => void; onAddLibrary: (tracks: LibraryTrack[], source: string) => void; busy: boolean; progress: string; error: string; connected: boolean; onConnect: () => void; onDisconnect: () => void }) {
-  const [page, setPage] = useState<Page>(result.plays.length ? "Resumen" : "Estudio");
+  const [page, setPage] = useState<Page>("Inicio");
+  const [view, setView] = useState<View>("Resumen");
+  const activeGroup = viewGroups.find((group) => group.views.includes(view))!;
   useEffect(() => { window.scrollTo(0, 0); }, [page]);
   const years = useMemo(() => [...new Set(result.plays.map((p) => p.year))].sort((a, b) => b - a), [result.plays]);
   const [year, setYear] = useState("all");
   const filtered = useMemo(() => year === "all" ? result.plays : result.plays.filter((p) => p.year === Number(year)), [result.plays, year]);
-  const content: Record<Page, ReactNode> = {
-    Resumen: <Overview plays={filtered} />,
-    Rankings: <Rankings plays={filtered} />,
-    Historia: <HistoryPage plays={filtered} />,
-    Hábitos: <Habits plays={filtered} />,
-    Sesiones: <SessionsPage plays={filtered} />,
-    Descubrimiento: <Discovery plays={filtered} />,
-    Podcasts: <Podcasts plays={filtered} />,
-    Explorar: <Explorer plays={filtered} />,
-    Fuentes: <SourcesPage result={result} onAdd={onAdd} onAddLibrary={onAddLibrary} busy={busy} progress={progress} error={error} connected={connected} onConnect={onConnect} />,
-    Estudio: null,
-    Tarjeta: <Wrapped plays={filtered} />,
-    Conexiones: <ConnectionsPage connected={connected} onConnect={onConnect} onDisconnect={onDisconnect} />,
-    Calidad: <Quality result={result} />,
-    Información: <><PageTitle eyebrow="Songweft" title="Información y privacidad" copy="Cómo comenzó el proyecto y qué sucede con tus datos." /><InformationContent /></>,
+  const viewContent: Record<View, ReactNode> = {
+    Resumen: <Overview plays={filtered} />, Rankings: <Rankings plays={filtered} />, Historia: <HistoryPage plays={filtered} />,
+    Hábitos: <Habits plays={filtered} />, Sesiones: <SessionsPage plays={filtered} />, Descubrimiento: <Discovery plays={filtered} />,
+    Podcasts: <Podcasts plays={filtered} />, Explorar: <Explorer plays={filtered} />, Calidad: <Quality result={result} />,
   };
+  const summary = useMemo(() => {
+    const music = filtered.filter((play) => play.contentType === "track");
+    const artists = ranking(music, (play) => play.creator, (play) => play.creator);
+    const songs = ranking(music, (play) => play.uri || `${play.creator}\u001f${play.item}`, (play) => play.item, (play) => play.creator);
+    return { minutes: sumMinutes(filtered), streams: filtered.filter((play) => play.ms >= 30_000).length, artists: artists.length, songs: songs.length, topArtist: artists[0], topTrack: songs[0] };
+  }, [filtered]);
+  const home = <>
+    <PageTitle eyebrow="Tu espacio musical" title="Tu música, a tu manera" copy="Tu historial ya está preparado. Elige qué quieres hacer con tu historia." />
+    <div className="home-hero"><div className="home-hero-copy"><span className="kicker">{year === "all" ? "Toda tu historia" : year}</span><strong><CountUp value={summary.minutes} /></strong><span>minutos de escucha</span><p>{summary.topArtist ? <><b>{summary.topArtist.name}</b> es tu artista más escuchado{summary.topTrack && <> · «{summary.topTrack.name}» destaca entre tus canciones</>}.</> : "Importa tu historial extendido para descubrir tus minutos y artistas."}</p></div><MusicMotion /></div>
+    <div className="stats-grid home-stats"><Stat label="Reproducciones ≥ 30 s" value={number.format(summary.streams)} hint={`${number.format(filtered.length)} registros totales`} icon={<Headphones />} /><Stat label="Artistas escuchados" value={number.format(summary.artists)} icon={<Music2 />} /><Stat label="Canciones diferentes" value={number.format(summary.songs)} icon={<Disc3 />} /></div>
+    <div className="home-actions">
+      <button className="action-visualize" onClick={() => setPage("Visualizar")}><span className="action-number">01</span><BarChart3 /><strong>Visualizar los datos</strong><span>Encuentra tus favoritos y recorre tus años, hábitos y descubrimientos.</span><b>Explorar <span>↗</span></b></button>
+      <button className="action-create" onClick={() => setPage("Crear")}><span className="action-number">02</span><ListMusic /><strong>Crear playlists</strong><span>Teje una lista con tus escuchas y artistas. Hasta 300 canciones a tu medida.</span><b>Empezar <span>↗</span></b></button>
+      <button className="action-share" onClick={() => setPage("Compartir")}><span className="action-number">03</span><Share2 /><strong>Compartir tu historia</strong><span>Dale una portada a tu música. Elige año, contenido y colores.</span><b>Diseñar <span>↗</span></b></button>
+    </div><button className="home-source-link" onClick={() => setPage("Fuentes")}>Añadir más archivos o configurar Spotify →</button>
+  </>;
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark"><img src={logoUrl} alt="" /></span><strong>Songweft</strong></div>
-        <nav><span className="nav-group-label">Visualizar</span>{pages.slice(0, 8).map(({ name, icon: Icon }) => <button key={name} className={page === name ? "active" : ""} onClick={() => setPage(name)}><Icon /> <span>{name}</span></button>)}<span className="nav-group-label">Crear y compartir</span>{pages.slice(8, 12).map(({ name, icon: Icon }) => <button key={name} className={page === name ? "active" : ""} onClick={() => setPage(name)}><Icon /> <span>{name}</span></button>)}<span className="nav-group-label">Proyecto</span>{pages.slice(12).map(({ name, icon: Icon }) => <button key={name} className={page === name ? "active" : ""} onClick={() => setPage(name)}><Icon /> <span>{name}</span></button>)}</nav>
+        <nav aria-label="Navegación principal">{pages.map(({ name, icon: Icon }) => <button key={name} aria-current={page === name ? "page" : undefined} className={page === name ? "active" : ""} onClick={() => setPage(name)}><Icon /> <span>{name}</span></button>)}</nav>
         <div className="sidebar-foot"><p className="creator-credit">Creado por<br /><strong>Iñigo Casares</strong></p><div><LockKeyhole /><span><strong>Solo en memoria</strong><small>Nada se ha subido</small></span></div><button onClick={onReset}><RotateCcw /> Cerrar historial</button></div>
       </aside>
       <main className="dashboard">
-        <header className="topbar"><div><span className="live-dot" /> Historial listo <small>{number.format(result.plays.length)} registros</small></div><label>Período<select value={year} onChange={(e) => setYear(e.target.value)}><option value="all">Todo el historial</option>{years.map((item) => <option key={item} value={item}>{item}</option>)}</select></label></header>
-        <div className="mobile-nav">{pages.map(({ name, icon: Icon }) => <button aria-label={name} title={name} key={name} className={page === name ? "active" : ""} onClick={() => setPage(name)}><Icon /></button>)}</div>
-        <div className="content">{page !== "Estudio" && (filtered.length || ["Información", "Calidad", "Fuentes", "Conexiones"].includes(page) ? content[page] : <div className="empty-state"><Music2 /><h2>No hay escuchas en este período</h2><p>Prueba con otro año.</p></div>)}<div hidden={page !== "Estudio"}><Studio key={year} result={{ ...result, plays: filtered }} connected={connected} onConnect={onConnect} /></div></div>
+        <header className="topbar"><div><span className="live-dot" /> Historial listo <small>{number.format(result.plays.length)} registros</small></div>{["Inicio", "Visualizar", "Crear"].includes(page) ? <label>Período<select value={year} onChange={(e) => setYear(e.target.value)}><option value="all">Todo el historial</option>{years.map((item) => <option key={item} value={item}>{item}</option>)}</select></label> : <span className="topbar-destination">{page}</span>}</header>
+        <nav className="mobile-nav" aria-label="Navegación móvil">{pages.map(({ name, icon: Icon }) => <button aria-current={page === name ? "page" : undefined} title={name} key={name} className={page === name ? "active" : ""} onClick={() => setPage(name)}><Icon /><span>{name}</span></button>)}</nav>
+        <div className="content">
+          <div className="page-enter" key={page}>
+            {page === "Inicio" && home}
+            {page === "Visualizar" && <>
+              <PageTitle eyebrow="Visualizar · 01" title="Explora tu historial" copy="Elige una perspectiva y recorre tu música con el período que prefieras." />
+              <nav className="view-nav" aria-label="Perspectivas del historial">{viewGroups.map((group) => <button key={group.name} aria-pressed={activeGroup === group} className={activeGroup === group ? "active" : ""} onClick={() => setView(group.views[0])}>{group.name}</button>)}</nav>
+              {activeGroup.views.length > 1 && <div className="view-detail">{activeGroup.views.map((item) => <button key={item} aria-pressed={view === item} className={view === item ? "active" : ""} onClick={() => setView(item)}>{item}</button>)}</div>}
+              <div className="view-enter" key={`${view}-${year}`}>{filtered.length || view === "Calidad" ? viewContent[view] : <div className="empty-state"><Music2 /><h2>No hay escuchas en este período</h2><p>Prueba con otro año.</p></div>}</div>
+            </>}
+            {page === "Compartir" && <Wrapped plays={result.plays} />}
+            {page === "Fuentes" && <><SourcesPage result={result} onAdd={onAdd} onAddLibrary={onAddLibrary} busy={busy} progress={progress} error={error} connected={connected} onConnect={onConnect} /><ConnectionsPage connected={connected} onConnect={onConnect} onDisconnect={onDisconnect} /></>}
+            {page === "Información" && <><PageTitle eyebrow="Songweft" title="Información y privacidad" copy="Cómo comenzó el proyecto y qué sucede con tus datos." /><InformationContent /></>}
+          </div>
+          <div hidden={page !== "Crear"} className={page === "Crear" ? "page-enter" : ""}><Studio key={year} result={{ ...result, plays: filtered }} knownPlays={result.plays} connected={connected} onConnect={onConnect} /></div>
+        </div>
       </main>
     </div>
   );
