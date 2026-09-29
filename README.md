@@ -14,11 +14,14 @@ La web está alojada en GitHub Pages y no necesita servidor ni base de datos. Gi
 
 ## Qué puedes hacer
 
-- Importar varios ZIP de Spotify, archivos JSON de historial y CSV de canciones. El importador acepta el historial ampliado y el historial normal de cuenta.
+- Importar varios ZIP de Spotify, archivos JSON de historial, `YourLibrary.json`, `Playlist1.json` y CSV de canciones. El importador acepta el historial ampliado y el historial normal de cuenta.
+- Empezar sin archivo pegando una lista `Artista — Canción` o ampliarla más tarde desde Fuentes. Las canciones pegadas tampoco se convierten en minutos ficticios.
 - Añadir más fuentes durante la misma sesión y retirar escuchas exactamente duplicadas.
 - Ver minutos, rankings, evolución, hábitos, sesiones, descubrimiento, podcasts y calidad de datos.
 - Crear playlists con recetas de favoritos, canciones olvidadas, temas poco escuchados de tus artistas y una mezcla ajustable.
-- Controlar número de canciones, límite por artista y artistas excluidos. Reordenar, quitar, sustituir o añadir canciones con un enlace de Spotify.
+- Controlar número de canciones, límite por artista y artistas excluidos. Reordenar, quitar, sustituir o añadir canciones con un enlace de Spotify, con deshacer y rehacer. La edición se mantiene al visitar otras secciones y añadir fuentes; al cambiar de período se crea un borrador nuevo.
+- Guardar y cargar recetas como archivos JSON locales para repetir una idea con otros datos o en otro momento.
+- Con Spotify conectado, explorar la discografía de uno de tus artistas principales y añadir canciones que todavía no aparecen en tus datos.
 - Descargar la playlist como CSV.
 - Crear una playlist privada en Spotify si conectas una app personal autorizada.
 - Descargar una tarjeta PNG con minutos y cinco artistas para compartir por tu cuenta.
@@ -28,6 +31,7 @@ Los CSV y las canciones guardadas de Spotify amplían la biblioteca, pero no apo
 ## Privacidad
 
 - Los archivos se procesan en la memoria del navegador. No se suben al alojamiento de la web ni se guardan en `localStorage` o IndexedDB.
+- GitHub Pages puede registrar visitas y peticiones de la web, como cualquier alojamiento, pero no recibe el contenido de los archivos seleccionados.
 - Al recargar o cerrar la pestaña, el historial cargado desaparece. Las descargas PNG y CSV se guardan únicamente si pulsas sus botones.
 - Al conectar Spotify, la autorización temporal se guarda en `sessionStorage` de esa pestaña. El navegador se comunica directamente con Spotify para leer la biblioteca o crear una playlist. Puedes desconectarlo desde Conexiones.
 - El repositorio ignora los ZIP, los Parquet y las tablas con datos personales.

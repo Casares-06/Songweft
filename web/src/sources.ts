@@ -4,6 +4,21 @@ import type { ImportResult, LibraryTrack, Play } from "./types";
 
 const MAX_TEXT_BYTES = 120 * 1024 * 1024;
 
+export function parsePastedTracks(input: string): LibraryTrack[] {
+  const lines = input.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (!lines.length) throw new Error("Pega al menos una canción.");
+  if (lines.length > 300) throw new Error("Pega como máximo 300 canciones cada vez.");
+  const tracks = lines.map((line, index) => {
+    const divider = line.search(/\s[—–-]\s/);
+    if (divider < 1) throw new Error(`Línea ${index + 1}: usa el formato Artista — Canción.`);
+    const creator = line.slice(0, divider).trim();
+    const item = line.slice(divider + 3).trim();
+    if (!creator || !item) throw new Error(`Línea ${index + 1}: faltan artista o canción.`);
+    return { creator, item, uri: "", collection: "", sourceFile: "Lista pegada" };
+  });
+  return tracks;
+}
+
 function parseCsv(input: string): string[][] {
   const firstLine = input.split(/\r?\n/, 1)[0];
   const delimiter = [",", ";", "\t"].sort((a, b) => firstLine.split(b).length - firstLine.split(a).length)[0];
@@ -110,17 +125,22 @@ export async function importSources(files: File[], onProgress?: (message: string
         if (file.size > MAX_TEXT_BYTES) throw new Error("El JSON supera 120 MB.");
         const content = await file.text();
         const parsed: unknown = JSON.parse(content);
-        if (!Array.isArray(parsed)) throw new Error("El JSON debe contener una lista de escuchas.");
-        const history = parsed.some((row) => row && typeof row === "object" && ("endTime" in row || "ts" in row));
-        if (history) {
-          const basic = parsed.some((row) => row && typeof row === "object" && "endTime" in row);
-          const archive = zipSync({ [basic ? "StreamingHistory_0.json" : "Streaming_History_Audio_0.json"]: strToU8(content) });
+        if (Array.isArray(parsed)) {
+          const history = parsed.some((row) => row && typeof row === "object" && ("endTime" in row || "ts" in row));
+          if (history) {
+            const basic = parsed.some((row) => row && typeof row === "object" && "endTime" in row);
+            const archive = zipSync({ [basic ? "StreamingHistory_0.json" : "Streaming_History_Audio_0.json"]: strToU8(content) });
+            results.push(await processSpotifyExport(new Blob([archive.buffer as ArrayBuffer])));
+          } else {
+            const tracks = jsonTracks(parsed, file.name);
+            if (!tracks.length) throw new Error("El JSON no contiene historial ni canciones reconocibles.");
+            libraryTracks.push(...tracks);
+          }
+        } else if (parsed && typeof parsed === "object" && (Array.isArray((parsed as Record<string, unknown>).tracks) || Array.isArray((parsed as Record<string, unknown>).playlists))) {
+          const entryName = Array.isArray((parsed as Record<string, unknown>).tracks) ? "YourLibrary.json" : "Playlist1.json";
+          const archive = zipSync({ [entryName]: strToU8(content) });
           results.push(await processSpotifyExport(new Blob([archive.buffer as ArrayBuffer])));
-        } else {
-          const tracks = jsonTracks(parsed, file.name);
-          if (!tracks.length) throw new Error("El JSON no contiene historial ni canciones reconocibles.");
-          libraryTracks.push(...tracks);
-        }
+        } else throw new Error("El JSON no tiene un formato de historial, biblioteca o playlist reconocible.");
       } else if (name.endsWith(".zip")) {
         results.push(await processSpotifyExport(file, onProgress));
       } else throw new Error("Formato no compatible. Usa ZIP, JSON o CSV.");

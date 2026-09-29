@@ -38,7 +38,7 @@ export async function connectSpotify(clientId: string) {
   const params = new URLSearchParams({
     response_type: "code",
     client_id: clientId.trim(),
-    scope: "playlist-modify-private playlist-read-private user-library-read user-top-read",
+    scope: "playlist-modify-private playlist-read-private user-library-read",
     redirect_uri: `${location.origin}${location.pathname}`,
     state,
     code_challenge_method: "S256",
@@ -83,12 +83,20 @@ async function accessToken() {
 
 async function request(path: string, init: RequestInit = {}) {
   const token = await accessToken();
-  const response = await fetch(`${API}${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, ...(init.body ? { "Content-Type": "application/json" } : {}), ...init.headers } });
-  if (!response.ok) {
-    if (response.status === 429) throw new Error("Spotify ha limitado las peticiones. Inténtalo más tarde.");
-    throw new Error(`Spotify devolvió un error ${response.status}. Comprueba los permisos de tu app.`);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const response = await fetch(`${API}${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, ...(init.body ? { "Content-Type": "application/json" } : {}), ...init.headers } });
+    if (response.status === 429 && attempt < 2) {
+      const seconds = Number(response.headers.get("Retry-After"));
+      await new Promise((resolve) => setTimeout(resolve, Math.min(30, Math.max(1, Number.isFinite(seconds) ? seconds : 3 * (attempt + 1))) * 1000));
+      continue;
+    }
+    if (!response.ok) {
+      if (response.status === 429) throw new Error("Spotify ha limitado las peticiones. Inténtalo más tarde.");
+      throw new Error(`Spotify devolvió un error ${response.status}. Comprueba los permisos de tu app.`);
+    }
+    return response.json();
   }
-  return response.json();
+  throw new Error("No se pudo completar la petición a Spotify.");
 }
 
 export async function createSpotifyPlaylist(name: string, uris: string[]) {
@@ -144,4 +152,24 @@ export async function importSpotifyPlaylist(url: string, onProgress?: (message: 
     if (!page.next || !page.items?.length) break;
   }
   return tracks;
+}
+
+export async function exploreArtistCatalog(artistName: string, knownUris: Set<string>): Promise<LibraryTrack[]> {
+  const found = await request(`/search?q=${encodeURIComponent(`artist:${artistName}`)}&type=artist&limit=5`);
+  const artist = found.artists?.items?.find((item: { name: string }) => item.name.toLowerCase() === artistName.toLowerCase());
+  if (!artist) throw new Error(`No se encontró a ${artistName} en Spotify.`);
+  const albums = await request(`/artists/${artist.id}/albums?include_groups=album,single&limit=8`);
+  const suggestions: LibraryTrack[] = [];
+  const seen = new Set<string>();
+  for (const album of (albums.items ?? []).slice(0, 5)) {
+    const page = await request(`/albums/${album.id}/tracks?limit=50`);
+    for (const entry of page.items ?? []) {
+      const track = asLibraryTrack({ ...entry, album: { name: album.name } }, "Spotify · Discografía");
+      if (!track || knownUris.has(track.uri) || seen.has(track.uri)) continue;
+      seen.add(track.uri);
+      suggestions.push(track);
+      if (suggestions.length >= 24) return suggestions;
+    }
+  }
+  return suggestions;
 }

@@ -36,7 +36,7 @@ import {
   sumMinutes,
   timeSeries,
 } from "./analytics";
-import { importSources, mergeImportResults } from "./sources";
+import { importSources, mergeImportResults, parsePastedTracks } from "./sources";
 import Studio from "./Studio";
 import Wrapped from "./Wrapped";
 import { connectSpotify, disconnectSpotify, finishSpotifyLogin, importSavedSpotifyTracks, importSpotifyPlaylist, listenForSpotifyConnection, spotifyConnected } from "./spotifyApi";
@@ -200,7 +200,7 @@ function InformationContent({ landing = false }: { landing?: boolean }) {
         <p>Songweft reúne tus datos musicales, muestra cómo has escuchado y te ayuda a convertirlos en playlists propias.</p>
       </div>
       <div className="steps-grid">
-        <article><span>01</span><h3>Añade</h3><p>Importa ZIP o JSON de Spotify y CSV de canciones. Puedes combinar varios archivos.</p></article>
+        <article><span>01</span><h3>Añade</h3><p>Importa ZIP, JSON o CSV, o pega tus canciones. Puedes combinar las fuentes.</p></article>
         <article><span>02</span><h3>Visualiza</h3><p>Consulta minutos reales, rankings, hábitos, sesiones y evolución.</p></article>
         <article><span>03</span><h3>Crea</h3><p>Genera, ajusta y exporta playlists. Conecta Spotify solo si quieres publicarlas allí.</p></article>
       </div>
@@ -209,7 +209,7 @@ function InformationContent({ landing = false }: { landing?: boolean }) {
           <ShieldCheck />
           <span className="kicker">Privacidad verificable</span>
           <h3>El archivo se queda en tu navegador.</h3>
-          <p>El historial se procesa en memoria y desaparece al cerrar o recargar. Si conectas Spotify, el navegador guarda temporalmente la autorización en esta pestaña y se comunica directamente con Spotify. La tarjeta solo sale de aquí cuando tú la descargas.</p>
+          <p>El historial se procesa en memoria y desaparece al cerrar o recargar. GitHub puede registrar la visita a la página, pero no recibe tus archivos. Si conectas Spotify, el navegador guarda temporalmente la autorización en esta pestaña y se comunica directamente con Spotify. La tarjeta solo sale de aquí cuando tú la descargas.</p>
         </article>
         <article className="creator-card">
           <div className="creator-avatar">IC</div>
@@ -244,9 +244,15 @@ function RankList({ rows, limit = 10 }: { rows: RankingRow[]; limit?: number }) 
   );
 }
 
-function UploadScreen({ onFiles, busy, progress, error }: { onFiles: (files: File[]) => void; busy: boolean; progress: string; error: string }) {
+function UploadScreen({ onFiles, onAddLibrary, busy, progress, error }: { onFiles: (files: File[]) => void; onAddLibrary: (tracks: LibraryTrack[], source: string) => void; busy: boolean; progress: string; error: string }) {
   const input = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
+  const [pasted, setPasted] = useState("");
+  const [pasteError, setPasteError] = useState("");
+  const addPasted = () => {
+    try { const tracks = parsePastedTracks(pasted); onAddLibrary(tracks, "Lista pegada"); setPasted(""); setPasteError(""); }
+    catch (caught) { setPasteError(caught instanceof Error ? caught.message : "No se pudo leer la lista."); }
+  };
   const choose = (event: ChangeEvent<HTMLInputElement>) => event.target.files?.length && onFiles([...event.target.files]);
   const drop = (event: DragEvent) => {
     event.preventDefault();
@@ -270,7 +276,7 @@ function UploadScreen({ onFiles, busy, progress, error }: { onFiles: (files: Fil
           <p>Importa tu historial y tus listas. Visualiza tus escuchas, crea playlists a tu manera y comparte solo lo que elijas.</p>
           <div className="trust-grid">
             <div><ShieldCheck /><span><strong>Privado de verdad</strong><small>Tu archivo nunca se transfiere</small></span></div>
-            <div><DatabaseZap /><span><strong>Varias fuentes</strong><small>ZIP, JSON y CSV</small></span></div>
+            <div><DatabaseZap /><span><strong>Varias fuentes</strong><small>ZIP, JSON, CSV o texto</small></span></div>
             <div><BarChart3 /><span><strong>Visualiza y crea</strong><small>Datos, playlists y tarjeta</small></span></div>
           </div>
         </div>
@@ -287,13 +293,14 @@ function UploadScreen({ onFiles, busy, progress, error }: { onFiles: (files: Fil
           {busy ? <div className="loader"><span /></div> : <button className="primary-button" onClick={() => input.current?.click()}><UploadCloud size={18} /> Seleccionar archivos</button>}
           <small className="local-note"><LockKeyhole size={13} /> Historial solo en memoria · ZIP hasta 250 MB cada uno</small>
           {error && <div className="error-box" role="alert">{error}</div>}
+          <div className="paste-entry"><span className="kicker">Otra forma de empezar</span><h2>Pega tus canciones</h2><p>Una por línea: <strong>Artista — Canción</strong>. Sirven para crear playlists, pero no suman minutos escuchados.</p><textarea value={pasted} onChange={(event) => setPasted(event.target.value)} placeholder={"Artista — Canción\nOtro artista — Otra canción"} rows={4} maxLength={30_000} /><button onClick={addPasted} disabled={!pasted.trim()}>Añadir canciones</button>{pasteError && <p className="error-box" role="alert">{pasteError}</p>}</div>
         </div>
         <a className="scroll-cue" href="#descubrir"><span>Descubre Songweft</span><ArrowDown /></a>
       </section>
       <CinematicStory />
       <InformationContent landing />
       <section className="final-cta">
-        <span className="kicker">Tu historia empieza con un archivo</span>
+        <span className="kicker">Tu historia empieza con tus canciones</span>
         <h2>¿Qué quieres descubrir y crear?</h2>
         <button className="primary-button" onClick={() => input.current?.click()}><UploadCloud /> Añadir mis archivos</button>
       </section>
@@ -313,7 +320,7 @@ function Overview({ plays }: { plays: Play[] }) {
     <>
       <section className="hero-summary">
         <div><span>Tu universo sonoro</span><h1>{number.format(sumMinutes(plays))} <em>minutos</em></h1><p>Entre {compactDate.format(plays[0].at)} y {compactDate.format(plays.at(-1)!.at)}</p></div>
-        <div className="pulse-disc"><Disc3 /><span>{plays.at(-1)!.year}</span></div>
+        <div className="record-disc"><Disc3 /><span>{plays.at(-1)!.year}</span></div>
       </section>
       <div className="artist-marquee" aria-label="Artistas más escuchados"><div>{[...artists.slice(0, 8), ...artists.slice(0, 8)].map((artist, index) => <span key={`${artist.key}-${index}`}>{artist.name}<i>✦</i></span>)}</div></div>
       <div className="stats-grid">
@@ -383,13 +390,28 @@ function Explorer({ plays }: { plays: Play[] }) {
   return <><PageTitle eyebrow="Explorar" title="Busca dentro de tu historia" copy="Los resultados permanecen únicamente en la memoria de esta pestaña." /><label className="search-box"><Search /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Canción, artista, álbum o podcast…" /></label><section className="panel table-wrap"><table><thead><tr><th>Fecha</th><th>Contenido</th><th>Artista / programa</th><th>Escucha</th></tr></thead><tbody>{matches.map((play) => <tr key={play.id}><td>{fullDate.format(play.at)}</td><td><strong>{play.item}</strong><small className="table-sub">{play.collection}</small></td><td>{play.creator}</td><td>{formatMinutes(play.minutes)}</td></tr>)}</tbody></table></section></>;
 }
 
-function Quality({ result }: { result: ImportResult }) {
-  const ratio = result.compressedBytes ? result.expandedBytes / result.compressedBytes : 0;
-  return <><PageTitle eyebrow="Calidad" title="Qué hemos contado y cómo" copy="Songweft elimina duplicados exactos y conserva reproducciones cortas para distinguir tiempo, eventos y streams de 30 segundos." /><div className="stats-grid"><Stat label="Registros originales" value={number.format(result.rawAudioRecords)} icon={<FileArchive />} /><Stat label="Registros analizados" value={number.format(result.plays.length)} icon={<CheckCircle2 />} /><Stat label="Duplicados retirados" value={number.format(result.duplicateRecords)} icon={<DatabaseZap />} /><Stat label="Fechas no válidas" value={number.format(result.invalidRecords)} icon={<Activity />} /></div><div className="two-column"><section className="panel methodology"><h2>Privacidad verificable</h2><ul><li>Los archivos no se envían a nuestro servidor.</li><li>No usamos analítica ni rastreadores.</li><li>El historial se mantiene en memoria durante esta pestaña.</li><li>Si conectas Spotify, la autorización temporal se guarda en la sesión de esta pestaña y se usa para comunicarte con Spotify.</li></ul></section><section className="panel methodology"><h2>Archivos importados</h2><dl><div><dt>Archivos añadidos</dt><dd>{result.sourceFiles.length}</dd></div><div><dt>Vídeos separados</dt><dd>{number.format(result.videoRecords)}</dd></div><div><dt>Tamaño de entrada</dt><dd>{decimal.format(result.compressedBytes / 1_048_576)} MB</dd></div><div><dt>Expansión ZIP declarada</dt><dd>{decimal.format(ratio)}×</dd></div><div><dt>Zona horaria</dt><dd>{Intl.DateTimeFormat().resolvedOptions().timeZone}</dd></div></dl></section></div><section className="panel file-list"><h2>Fuentes de esta sesión</h2>{result.sourceFiles.map((name, index) => <span key={`${name}-${index}`}><CheckCircle2 />{name}</span>)}</section></>;
+function SourceList({ sources, title }: { sources: string[]; title: string }) {
+  return <section className="panel file-list"><h2>{title}</h2>{sources.map((name, index) => <span className={name.startsWith("Error:") ? "source-error" : ""} key={`${name}-${index}`}>{name.startsWith("Error:") ? <Info /> : <CheckCircle2 />}{name}</span>)}</section>;
 }
 
-function SourcesPage({ result, onAdd, onAddLibrary, busy, progress, error, connected, onConnect }: { result: ImportResult; onAdd: (files: File[]) => void; onAddLibrary: (tracks: LibraryTrack[]) => void; busy: boolean; progress: string; error: string; connected: boolean; onConnect: () => void }) {
+function Quality({ result }: { result: ImportResult }) {
+  const ratio = result.compressedBytes ? result.expandedBytes / result.compressedBytes : 0;
+  const acceptedSources = result.sourceFiles.filter((name) => !name.startsWith("Error:")).length;
+  return <>
+    <PageTitle eyebrow="Calidad" title="Qué hemos contado y cómo" copy="Songweft elimina duplicados exactos y coincidencias entre exportaciones con distinta precisión horaria. Conserva escuchas cortas para distinguir minutos, eventos y streams de 30 segundos." />
+    <div className="stats-grid"><Stat label="Registros originales" value={number.format(result.rawAudioRecords)} icon={<FileArchive />} /><Stat label="Registros analizados" value={number.format(result.plays.length)} icon={<CheckCircle2 />} /><Stat label="Duplicados retirados" value={number.format(result.duplicateRecords)} icon={<DatabaseZap />} /><Stat label="Fechas no válidas" value={number.format(result.invalidRecords)} icon={<Activity />} /></div>
+    <div className="two-column">
+      <section className="panel methodology"><h2>Privacidad verificable</h2><ul><li>Los archivos no se envían al alojamiento.</li><li>No usamos analítica ni rastreadores propios.</li><li>GitHub Pages puede registrar visitas a la web.</li><li>El historial se mantiene en memoria durante esta pestaña.</li><li>Si conectas Spotify, la autorización temporal se guarda en la sesión de esta pestaña y el navegador se comunica con Spotify.</li></ul></section>
+      <section className="panel methodology"><h2>Fuentes importadas</h2><dl><div><dt>Fuentes aceptadas</dt><dd>{acceptedSources}</dd></div><div><dt>Vídeos separados</dt><dd>{number.format(result.videoRecords)}</dd></div><div><dt>Tamaño de entrada</dt><dd>{decimal.format(result.compressedBytes / 1_048_576)} MB</dd></div><div><dt>Expansión ZIP declarada</dt><dd>{ratio ? `${decimal.format(ratio)}×` : "—"}</dd></div><div><dt>Zona horaria</dt><dd>{Intl.DateTimeFormat().resolvedOptions().timeZone}</dd></div></dl></section>
+    </div>
+    <SourceList sources={result.sourceFiles} title="Fuentes de esta sesión" />
+  </>;
+}
+
+function SourcesPage({ result, onAdd, onAddLibrary, busy, progress, error, connected, onConnect }: { result: ImportResult; onAdd: (files: File[]) => void; onAddLibrary: (tracks: LibraryTrack[], source: string) => void; busy: boolean; progress: string; error: string; connected: boolean; onConnect: () => void }) {
   const input = useRef<HTMLInputElement>(null);
+  const [pasted, setPasted] = useState("");
+  const [pasteMessage, setPasteMessage] = useState("");
   const [playlistUrl, setPlaylistUrl] = useState("");
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
@@ -398,16 +420,17 @@ function SourcesPage({ result, onAdd, onAddLibrary, busy, progress, error, conne
     setSyncBusy(true); setSyncMessage("");
     try {
       const tracks = kind === "saved" ? await importSavedSpotifyTracks(setSyncMessage) : await importSpotifyPlaylist(playlistUrl, setSyncMessage);
-      onAddLibrary(tracks);
+      onAddLibrary(tracks, kind === "saved" ? "Spotify · Canciones guardadas" : "Spotify · Playlist");
       setSyncMessage(`${tracks.length} canciones añadidas a tu biblioteca. No cuentan como minutos escuchados.`);
     } catch (caught) { setSyncMessage(caught instanceof Error ? caught.message : "No se pudo leer Spotify."); }
     finally { setSyncBusy(false); }
   };
-  return <><PageTitle eyebrow="Tus datos · 00" title="Fuentes de tu biblioteca" copy="Añade más exportaciones cuando quieras. Unimos los archivos y retiramos escuchas exactamente duplicadas." />
+  return <><PageTitle eyebrow="Tus datos · 00" title="Fuentes de tu biblioteca" copy="Añade más exportaciones cuando quieras. Unimos los archivos y retiramos duplicados y coincidencias entre formatos." />
     <section className="panel sources-panel"><FileArchive size={34} /><div><h2>Importar más archivos</h2><p>ZIP o JSON de Spotify y CSV con columnas de canción y artista. Los CSV añaden canciones a la biblioteca; no inventan minutos de escucha.</p><input ref={input} type="file" multiple accept=".zip,.json,.csv" hidden onChange={(event) => event.target.files?.length && onAdd([...event.target.files])} /><button className="primary-button" disabled={busy} onClick={() => input.current?.click()}><UploadCloud size={17} /> {busy ? progress : "Añadir archivos"}</button>{error && <p className="error-box" role="alert">{error}</p>}</div></section>
-    <div className="stats-grid"><Stat label="Escuchas" value={number.format(result.plays.length)} icon={<Headphones />} /><Stat label="Canciones importadas" value={number.format(result.libraryTracks?.length ?? 0)} icon={<Music2 />} /><Stat label="Duplicados retirados" value={number.format(result.duplicateRecords)} icon={<DatabaseZap />} /><Stat label="Archivos añadidos" value={number.format(result.sourceFiles.length)} icon={<FileArchive />} /></div>
+    <section className="panel pasted-source"><span className="kicker">Sin archivo</span><h2>Pega una lista de canciones</h2><p>Una por línea en formato <strong>Artista — Canción</strong>. No se añaden minutos ficticios.</p><textarea value={pasted} onChange={(event) => setPasted(event.target.value)} rows={5} maxLength={30_000} placeholder={"Artista — Canción\nOtro artista — Otra canción"} /><button onClick={() => { try { const tracks = parsePastedTracks(pasted); onAddLibrary(tracks, "Lista pegada"); setPasted(""); setPasteMessage(`${tracks.length} canciones añadidas.`); } catch (caught) { setPasteMessage(caught instanceof Error ? caught.message : "No se pudo leer la lista."); } }} disabled={!pasted.trim()}>Añadir a mi biblioteca</button>{pasteMessage && <p role="status">{pasteMessage}</p>}</section>
+    <div className="stats-grid"><Stat label="Escuchas" value={number.format(result.plays.length)} icon={<Headphones />} /><Stat label="Canciones importadas" value={number.format(result.libraryTracks?.length ?? 0)} icon={<Music2 />} /><Stat label="Duplicados retirados" value={number.format(result.duplicateRecords)} icon={<DatabaseZap />} /><Stat label="Fuentes aceptadas" value={number.format(result.sourceFiles.filter((name) => !name.startsWith("Error:")).length)} icon={<FileArchive />} /></div>
     <section className="panel spotify-source"><span className="kicker">Fuente conectada</span><h2>Tu biblioteca de Spotify</h2><p>Añade tus canciones guardadas o una playlist propia. Estas canciones amplían el Estudio; la API no proporciona sus minutos de escucha históricos.</p><div className="spotify-source-actions"><button disabled={syncBusy} onClick={() => sync("saved")}>Añadir canciones guardadas</button><input value={playlistUrl} onChange={(event) => setPlaylistUrl(event.target.value)} placeholder="Enlace de una playlist propia" /><button disabled={syncBusy} onClick={() => sync("playlist")}>Añadir playlist</button></div><small>{connected ? "Spotify conectado" : "Al pulsar se te pedirá conectar Spotify primero."}</small>{syncMessage && <p role="status">{syncMessage}</p>}</section>
-    <section className="panel file-list"><h2>Archivos de esta sesión</h2>{result.sourceFiles.map((name, index) => <span key={`${name}-${index}`}><CheckCircle2 />{name}</span>)}</section>
+    <SourceList sources={result.sourceFiles} title="Fuentes de esta sesión" />
   </>;
 }
 
@@ -421,8 +444,9 @@ function PageTitle({ eyebrow, title, copy }: { eyebrow: string; title: string; c
   return <header className="page-title"><span className="kicker">{eyebrow}</span><h1>{title}</h1><p>{copy}</p></header>;
 }
 
-function Dashboard({ result, onReset, onAdd, onAddLibrary, busy, progress, error, connected, onConnect, onDisconnect }: { result: ImportResult; onReset: () => void; onAdd: (files: File[]) => void; onAddLibrary: (tracks: LibraryTrack[]) => void; busy: boolean; progress: string; error: string; connected: boolean; onConnect: () => void; onDisconnect: () => void }) {
+function Dashboard({ result, onReset, onAdd, onAddLibrary, busy, progress, error, connected, onConnect, onDisconnect }: { result: ImportResult; onReset: () => void; onAdd: (files: File[]) => void; onAddLibrary: (tracks: LibraryTrack[], source: string) => void; busy: boolean; progress: string; error: string; connected: boolean; onConnect: () => void; onDisconnect: () => void }) {
   const [page, setPage] = useState<Page>(result.plays.length ? "Resumen" : "Estudio");
+  useEffect(() => { window.scrollTo(0, 0); }, [page]);
   const years = useMemo(() => [...new Set(result.plays.map((p) => p.year))].sort((a, b) => b - a), [result.plays]);
   const [year, setYear] = useState("all");
   const filtered = useMemo(() => year === "all" ? result.plays : result.plays.filter((p) => p.year === Number(year)), [result.plays, year]);
@@ -436,7 +460,7 @@ function Dashboard({ result, onReset, onAdd, onAddLibrary, busy, progress, error
     Podcasts: <Podcasts plays={filtered} />,
     Explorar: <Explorer plays={filtered} />,
     Fuentes: <SourcesPage result={result} onAdd={onAdd} onAddLibrary={onAddLibrary} busy={busy} progress={progress} error={error} connected={connected} onConnect={onConnect} />,
-    Estudio: <Studio key={`${year}-${result.sourceFiles.length}`} result={{ ...result, plays: filtered }} connected={connected} onConnect={onConnect} />,
+    Estudio: null,
     Tarjeta: <Wrapped plays={filtered} />,
     Conexiones: <ConnectionsPage connected={connected} onConnect={onConnect} onDisconnect={onDisconnect} />,
     Calidad: <Quality result={result} />,
@@ -452,7 +476,7 @@ function Dashboard({ result, onReset, onAdd, onAddLibrary, busy, progress, error
       <main className="dashboard">
         <header className="topbar"><div><span className="live-dot" /> Historial listo <small>{number.format(result.plays.length)} registros</small></div><label>Período<select value={year} onChange={(e) => setYear(e.target.value)}><option value="all">Todo el historial</option>{years.map((item) => <option key={item} value={item}>{item}</option>)}</select></label></header>
         <div className="mobile-nav">{pages.map(({ name, icon: Icon }) => <button aria-label={name} title={name} key={name} className={page === name ? "active" : ""} onClick={() => setPage(name)}><Icon /></button>)}</div>
-        <div className="content">{filtered.length || ["Información", "Calidad", "Fuentes", "Estudio", "Conexiones"].includes(page) ? content[page] : <div className="empty-state"><Music2 /><h2>No hay escuchas en este período</h2><p>Prueba con otro año.</p></div>}</div>
+        <div className="content">{page !== "Estudio" && (filtered.length || ["Información", "Calidad", "Fuentes", "Conexiones"].includes(page) ? content[page] : <div className="empty-state"><Music2 /><h2>No hay escuchas en este período</h2><p>Prueba con otro año.</p></div>)}<div hidden={page !== "Estudio"}><Studio key={year} result={{ ...result, plays: filtered }} connected={connected} onConnect={onConnect} /></div></div>
       </main>
     </div>
   );
@@ -497,9 +521,12 @@ export default function App() {
     catch (caught) { setConnectError(caught instanceof Error ? caught.message : "No se pudo iniciar Spotify."); }
   };
 
-  const addLibrary = (tracks: LibraryTrack[]) => setResult((current) => current ? { ...current, libraryTracks: [...new Map([...(current.libraryTracks ?? []), ...tracks].map((track) => [track.uri || `${track.creator}\u001f${track.item}`, track])).values()], sourceFiles: [...current.sourceFiles, `Spotify · ${tracks.length} canciones`] } : current);
+  const addLibrary = (tracks: LibraryTrack[], source: string) => setResult((current) => {
+    const libraryTracks = [...new Map([...(current?.libraryTracks ?? []), ...tracks].map((track) => [track.uri || `${track.creator.toLowerCase()}\u001f${track.item.toLowerCase()}`, track])).values()];
+    return current ? { ...current, libraryTracks, sourceFiles: [...current.sourceFiles, `${source} · ${tracks.length} canciones`] } : { plays: [], libraryTracks, rawAudioRecords: 0, duplicateRecords: 0, invalidRecords: 0, videoRecords: 0, sourceFiles: [`${source} · ${tracks.length} canciones`], compressedBytes: 0, expandedBytes: 0 };
+  });
 
-  return <>{result ? <Dashboard result={result} onReset={() => setResult(null)} onAdd={handleFiles} onAddLibrary={addLibrary} busy={busy} progress={progress} error={error} connected={connected} onConnect={() => setConnectOpen(true)} onDisconnect={() => { disconnectSpotify(); setConnected(false); }} /> : <UploadScreen onFiles={handleFiles} busy={busy} progress={progress} error={error} />}
+  return <>{result ? <Dashboard result={result} onReset={() => setResult(null)} onAdd={handleFiles} onAddLibrary={addLibrary} busy={busy} progress={progress} error={error} connected={connected} onConnect={() => setConnectOpen(true)} onDisconnect={() => { disconnectSpotify(); setConnected(false); }} /> : <UploadScreen onFiles={handleFiles} onAddLibrary={addLibrary} busy={busy} progress={progress} error={error} />}
     {connectOpen && <div className="modal-backdrop" role="presentation" onMouseDown={() => setConnectOpen(false)}><div className="connection-modal" role="dialog" aria-modal="true" aria-labelledby="connect-title" onMouseDown={(event) => event.stopPropagation()}><button className="modal-close" onClick={() => setConnectOpen(false)} aria-label="Cerrar">×</button><span className="kicker">Conexión opcional</span><h2 id="connect-title">Conecta tu Spotify</h2><p>Crea una app personal en <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noreferrer">Spotify Developer</a>, copia su Client ID y registra esta dirección de retorno:</p><code>{location.origin}{location.pathname}</code><p>La app se abrirá en una ventana de Spotify. Se solicitará permiso para leer tu biblioteca y crear playlists privadas. Tu archivo de escuchas seguirá en este navegador.</p><label>Client ID<input value={clientId} onChange={(event) => setClientId(event.target.value)} placeholder="32 caracteres" /></label>{connectError && <p className="error-box" role="alert">{connectError}</p>}<button className="primary-button" onClick={startConnection}>Continuar con Spotify</button><small>Spotify exige Premium al propietario de una app en modo desarrollo. El uso personal no requiere contratar alojamiento adicional.</small></div></div>}
   </>;
 }

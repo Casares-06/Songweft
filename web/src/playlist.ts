@@ -18,18 +18,31 @@ export interface PlaylistOptions {
 
 export function buildCatalog(plays: Play[], imported: LibraryTrack[] = []): TrackChoice[] {
   const catalog = new Map<string, TrackChoice>();
+  const byName = new Map<string, TrackChoice>();
+  const nameKey = (creator: string, item: string) => `${creator.trim().toLowerCase()}\u001f${item.trim().toLowerCase()}`;
   for (const play of plays) {
     if (play.contentType !== "track" || play.item === "Sin título") continue;
-    const key = play.uri.startsWith("spotify:track:") ? play.uri : `${play.creator.toLowerCase()}\u001f${play.item.toLowerCase()}`;
+    const key = play.uri.startsWith("spotify:track:") ? play.uri : nameKey(play.creator, play.item);
     const track = catalog.get(key) ?? { key, uri: play.uri.startsWith("spotify:track:") ? play.uri : "", item: play.item, creator: play.creator, collection: play.collection, sourceFile: play.sourceFile, minutes: 0, listens: 0, lastPlayed: 0, reason: "" };
     track.minutes += play.minutes;
     if (play.ms >= 30_000) track.listens += 1;
     track.lastPlayed = Math.max(track.lastPlayed, play.timestamp);
     catalog.set(key, track);
+    byName.set(nameKey(play.creator, play.item), track);
   }
   for (const item of imported) {
-    const key = item.uri || `${item.creator.toLowerCase()}\u001f${item.item.toLowerCase()}`;
-    if (!catalog.has(key)) catalog.set(key, { ...item, key, minutes: 0, listens: 0, lastPlayed: 0, reason: "Importada desde tu biblioteca" });
+    const fallback = nameKey(item.creator, item.item);
+    const exact = item.uri ? catalog.get(item.uri) : undefined;
+    const named = byName.get(fallback);
+    const match = exact ?? (named && (!named.uri || !item.uri) ? named : undefined);
+    if (match) {
+      if (!match.uri && item.uri) match.uri = item.uri;
+      continue;
+    }
+    const key = item.uri || fallback;
+    const track = { ...item, key, minutes: 0, listens: 0, lastPlayed: 0, reason: "Importada desde tu biblioteca" };
+    catalog.set(key, track);
+    byName.set(fallback, track);
   }
   return [...catalog.values()];
 }

@@ -32,7 +32,7 @@ function fingerprint(record: SpotifyRecord): string {
   return [
     record.ts ?? record.endTime,
     record.ms_played ?? record.msPlayed,
-    record.spotify_track_uri ?? `${record.artistName ?? ""}:${record.trackName ?? ""}`,
+    record.spotify_track_uri ?? `${record.artistName ?? record.podcastName ?? ""}:${record.trackName ?? record.episodeName ?? ""}`,
     record.spotify_episode_uri,
     record.audiobook_chapter_uri,
     record.platform,
@@ -57,24 +57,27 @@ function normalizeRecord(record: SpotifyRecord, sourceFile: string, id: number):
   const episodeUri = text(record.spotify_episode_uri);
   const bookUri = text(record.audiobook_chapter_uri);
   let contentType: ContentType = "unknown";
-  if (trackUri || (text(record.artistName) && text(record.trackName))) contentType = "track";
-  else if (episodeUri) contentType = "episode";
+  if (trackUri || (text(record.master_metadata_album_artist_name) && text(record.master_metadata_track_name)) || (text(record.artistName) && text(record.trackName))) contentType = "track";
+  else if (episodeUri || (text(record.podcastName) && text(record.episodeName))) contentType = "episode";
   else if (bookUri) contentType = "audiobook";
 
   const item =
     text(record.master_metadata_track_name) ||
     text(record.trackName) ||
+    text(record.episodeName) ||
     text(record.episode_name) ||
     text(record.audiobook_chapter_title) ||
     "Sin título";
   const creator =
     text(record.master_metadata_album_artist_name) ||
     text(record.artistName) ||
+    text(record.podcastName) ||
     text(record.episode_show_name) ||
     text(record.audiobook_title) ||
     "Desconocido";
   const collection =
     text(record.master_metadata_album_album_name) ||
+    text(record.podcastName) ||
     text(record.episode_show_name) ||
     text(record.audiobook_title) ||
     "Sin colección";

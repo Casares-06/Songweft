@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { strToU8, zipSync } from "fflate";
-import { importSources, mergeImportResults } from "./sources";
+import { importSources, mergeImportResults, parsePastedTracks } from "./sources";
 import { buildCatalog, recommendTracks } from "./playlist";
 
 const history = [{ endTime: "2025-01-02 12:00", artistName: "Artista", trackName: "Canción", msPlayed: 120_000 }];
 
 describe("fuentes y playlists", () => {
+  it("permite empezar con una lista de texto sin inventar minutos", () => {
+    const tracks = parsePastedTracks("Artista A — Canción A\nArtista B - Canción B");
+    expect(tracks).toHaveLength(2);
+    expect(buildCatalog([], tracks).every((track) => track.minutes === 0)).toBe(true);
+    expect(() => parsePastedTracks("Sin separador")).toThrow(/Línea 1/);
+  });
   it("une ZIP normal, JSON y CSV sin duplicar escuchas", async () => {
     const zip = zipSync({ "MyData/StreamingHistory_music_0.json": strToU8(JSON.stringify(history)) });
     const files = [
@@ -34,12 +40,32 @@ describe("fuentes y playlists", () => {
   it("aprovecha la biblioteca y playlists del ZIP de cuenta", async () => {
     const zip = zipSync({
       "Spotify Account Data/StreamingHistory_music_0.json": strToU8(JSON.stringify(history)),
+      "Spotify Account Data/StreamingHistory_podcast_0.json": strToU8(JSON.stringify([{ endTime: "2025-01-03 12:00", podcastName: "Podcast", episodeName: "Episodio", msPlayed: 300_000 }])),
       "Spotify Account Data/YourLibrary.json": strToU8(JSON.stringify({ tracks: [{ artist: "Artista", track: "Otra", album: "Álbum", uri: "spotify:track:0123456789abcdefghijkl" }] })),
       "Spotify Account Data/Playlist1.json": strToU8(JSON.stringify({ playlists: [{ items: [{ track: { artistName: "Otro artista", trackName: "Tercera", albumName: "Otro álbum", trackUri: "spotify:track:abcdefghijkl0123456789" } }] }] })),
     });
     const file = new File([zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength) as ArrayBuffer], "account.zip");
     const result = await importSources([file]);
-    expect(result.plays).toHaveLength(1);
+    expect(result.plays).toHaveLength(2);
+    expect(result.plays.some((play) => play.contentType === "episode" && play.creator === "Podcast")).toBe(true);
     expect(result.libraryTracks).toHaveLength(2);
+  });
+
+  it("acepta YourLibrary.json y Playlist1.json sin empaquetarlos", async () => {
+    const files = [
+      new File([JSON.stringify({ tracks: [{ artist: "Una artista", track: "Su canción", uri: "spotify:track:0123456789abcdefghijkl" }] })], "YourLibrary.json"),
+      new File([JSON.stringify({ playlists: [{ items: [{ track: { artistName: "Otro artista", trackName: "Otro tema", trackUri: "spotify:track:abcdefghijkl0123456789" } }] }] })], "Playlist1.json"),
+    ];
+    const result = await importSources(files);
+    expect(result.plays).toHaveLength(0);
+    expect(result.libraryTracks).toHaveLength(2);
+  });
+
+  it("completa con la biblioteca una URI ausente del historial sin duplicar canción", async () => {
+    const result = await importSources([new File([JSON.stringify([{ ts: "2025-01-01T12:00:00Z", ms_played: 60_000, master_metadata_track_name: "Tema", master_metadata_album_artist_name: "Artista", spotify_track_uri: null }])], "escuchas.json")]);
+    const catalog = buildCatalog(result.plays, [{ creator: "Artista", item: "Tema", uri: "spotify:track:0123456789abcdefghijkl", collection: "", sourceFile: "biblioteca.csv" }]);
+    expect(catalog).toHaveLength(1);
+    expect(catalog[0].minutes).toBe(1);
+    expect(catalog[0].uri).toBe("spotify:track:0123456789abcdefghijkl");
   });
 });

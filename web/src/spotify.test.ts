@@ -42,6 +42,14 @@ describe("importación privada de Spotify", () => {
     await expect(processSpotifyExport(new Blob([bytes]))).rejects.toThrow(/ruta no segura/i);
   });
 
+  it("cuenta canciones con título y artista aunque Spotify omita su URI", async () => {
+    const archive = zipSync({ "Streaming_History_Audio_2025.json": strToU8(JSON.stringify([{ ts: "2025-02-01T12:00:00Z", ms_played: 90_000, master_metadata_track_name: "Canción sin URI", master_metadata_album_artist_name: "Artista independiente", spotify_track_uri: null }])) });
+    const bytes = archive.buffer.slice(archive.byteOffset, archive.byteOffset + archive.byteLength) as ArrayBuffer;
+    const result = await processSpotifyExport(new Blob([bytes]));
+    expect(result.plays[0].contentType).toBe("track");
+    expect(result.plays[0].minutes).toBe(1.5);
+  });
+
   it.skipIf(!process.env.SONGWEFT_TEST_ZIP)("procesa una exportación real sin escribirla", async () => {
     const path = process.env.SONGWEFT_TEST_ZIP!;
     const bytes = new Uint8Array(await readFile(path));
