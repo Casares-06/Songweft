@@ -30,6 +30,9 @@ export interface LibraryTrack {
   creator: string;
   collection: string;
   sourceFile: string;
+  isrc?: string;
+  releaseDate?: string;
+  albumType?: "album" | "single" | "compilation";
 }
 
 export interface Play {

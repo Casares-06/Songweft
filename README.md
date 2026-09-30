@@ -19,7 +19,8 @@ La web está alojada en GitHub Pages y no necesita servidor ni base de datos. Gi
 - Añadir más fuentes durante la misma sesión y retirar escuchas exactamente duplicadas.
 - Llegar a un Inicio después de importar, con información general y tres destinos: Visualizar, Crear y Compartir. Los análisis se agrupan en Panorama, Favoritos, Tu ritmo, Descubrir y Detalle.
 - Ver minutos, rankings, evolución, hábitos, sesiones, descubrimiento, podcasts y calidad de datos.
-- Crear playlists desde las canciones de tu historial, con recetas de favoritos, canciones olvidadas, temas poco escuchados, una mezcla ajustable y artistas elegidos. Si hay escuchas, las canciones de bibliotecas adicionales solo enriquecen sus enlaces; no se mezclan automáticamente con tus sugerencias.
+- Crear playlists mediante un asistente de cuatro pasos: favoritos, canciones olvidadas, cápsulas temporales, mezclas ajustables o discografías completas de artistas elegidos. Puede incorporar canciones no escuchadas, colaboraciones y recopilatorios sin un límite artificial de tamaño.
+- Evitar duplicados aunque una misma grabación tenga varios IDs en Spotify, usando ISRC cuando está disponible y una identidad normalizada de título y artistas como respaldo.
 - Elegir hasta 300 canciones, ampliar el máximo por artista hasta 300 y excluir artistas. Reordenar, quitar, sustituir o añadir canciones con un enlace de Spotify, con deshacer y rehacer. La edición se mantiene al visitar otras secciones y añadir fuentes; al cambiar de período se crea un borrador nuevo.
 - Guardar y cargar recetas como archivos JSON locales para repetir una idea con otros datos o en otro momento.
 - Elegir varios artistas de todas tus escuchas y buscar otros en el catálogo de Spotify. Con una conexión autorizada puedes incluir canciones que no aparecen en todo tu historial importado, incluso si filtras un año. No equivale a demostrar que nunca hayas escuchado esas canciones: el ZIP puede estar incompleto y Spotify puede tener distintas versiones. La consulta revisa hasta 100 álbumes por artista y se detiene cuando alcanza el número solicitado.
@@ -44,7 +45,7 @@ Los CSV y las canciones guardadas de Spotify amplían la biblioteca, pero no apo
 2. Copia el `Client ID` (nunca el Client Secret).
 3. Registra como URI de redirección la dirección que muestra la ventana de conexión de Songweft. En local se usa `http://127.0.0.1:5173/Songweft/`; en la web pública, `https://casares-06.github.io/Songweft/`.
 4. En Songweft, abre **Fuentes**, configura la conexión y pega el Client ID. Autoriza los permisos en la ventana oficial de Spotify.
-5. En **Fuentes** puedes añadir canciones guardadas o una playlist propia. En **Crear** puedes crear una playlist privada. Las listas de hasta 300 canciones se envían en lotes de 100.
+5. En **Fuentes** puedes añadir canciones guardadas o una playlist propia. En **Crear** puedes diseñar y revisar una playlist privada. Las listas se envían a Spotify automáticamente en lotes de 100, sin limitar su tamaño total desde Songweft.
 
 Spotify exige Premium al propietario de una app en modo desarrollo y limita ese modo a cinco usuarios. La parte pública de análisis e importación no depende de su API. Spotify no entrega por API todos los minutos históricos; por eso el ZIP sigue siendo la fuente de referencia. El endpoint antiguo de recomendaciones está obsoleto, así que las recetas de Songweft se calculan localmente a partir de tus datos.
 

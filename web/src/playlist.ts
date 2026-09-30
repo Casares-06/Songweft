@@ -1,6 +1,6 @@
 import type { LibraryTrack, Play } from "./types";
 
-export type Recipe = "favorites" | "forgotten" | "deepcuts" | "balanced" | "artists";
+export type Recipe = "favorites" | "forgotten" | "deepcuts" | "balanced" | "artists" | "timecapsule";
 export interface TrackChoice extends LibraryTrack {
   key: string;
   minutes: number;
@@ -11,6 +11,28 @@ export interface TrackChoice extends LibraryTrack {
 }
 
 export const trackNameKey = (creator: string, item: string) => `${creator.normalize("NFKC").trim().toLowerCase()}\u001f${item.normalize("NFKC").trim().toLowerCase()}`;
+
+const normalizedWords = (value: string) => value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+const editionWords = /\b(remaster(?:ed)?|deluxe|anniversary|expanded|bonus track|radio edit|single version|album version|mono|stereo|explicit|clean)\b/gi;
+export function recordingKey(track: Pick<LibraryTrack, "item" | "creator" | "isrc">) {
+  if (track.isrc) return `isrc:${track.isrc.replace(/[^a-z0-9]/gi, "").toLowerCase()}`;
+  const title = normalizedWords(track.item.replace(/[([][^)\]]*(?:remaster|deluxe|anniversary|expanded|bonus track|radio edit|single version|album version|mono|stereo|explicit|clean)[^)\]]*[)\]]/gi, " ").replace(editionWords, " "));
+  const primaryArtist = track.creator.split(/,|&|\bfeat\.?\b|\bft\.?\b|\bwith\b/i).map(normalizedWords).find(Boolean) ?? normalizedWords(track.creator);
+  return `name:${title}\u001f${primaryArtist}`;
+}
+
+export function deduplicateTracks<T extends Pick<LibraryTrack, "item" | "creator" | "uri" | "isrc">>(tracks: T[]) {
+  const seenUris = new Set<string>();
+  const seenRecordings = new Set<string>();
+  return tracks.filter((track) => {
+    const identity = recordingKey(track);
+    const byName = recordingKey({ ...track, isrc: undefined });
+    if ((track.uri && seenUris.has(track.uri)) || seenRecordings.has(identity) || seenRecordings.has(byName)) return false;
+    if (track.uri) seenUris.add(track.uri);
+    seenRecordings.add(identity); seenRecordings.add(byName);
+    return true;
+  });
+}
 export interface PlaylistOptions {
   recipe: Recipe;
   count: number;
@@ -18,6 +40,9 @@ export interface PlaylistOptions {
   novelty: number;
   excludedArtists: string[];
   selectedArtists?: string[];
+  allTracks?: boolean;
+  order?: "balanced" | "ranking" | "recent" | "oldest" | "random";
+  onlyUnheard?: boolean;
 }
 
 export function buildCatalog(plays: Play[], imported: LibraryTrack[] = []): TrackChoice[] {
@@ -48,7 +73,7 @@ export function buildCatalog(plays: Play[], imported: LibraryTrack[] = []): Trac
     catalog.set(key, track);
     byName.set(fallback, track);
   }
-  return [...catalog.values()];
+  return deduplicateTracks([...catalog.values()]);
 }
 
 export function recommendTracks(catalog: TrackChoice[], options: PlaylistOptions, now = Date.now()): TrackChoice[] {
@@ -72,6 +97,7 @@ export function recommendTracks(catalog: TrackChoice[], options: PlaylistOptions
     if (options.recipe === "deepcuts") { score = affinity * 0.7 + underplayed * 0.3; reason = `Un tema poco escuchado de ${track.creator}`; }
     if (options.recipe === "balanced") { score = familiarity * (1 - options.novelty / 100) + underplayed * (options.novelty / 100) * 0.7 + affinity * 0.3; reason = track.minutes ? `${Math.round(track.minutes)} min en tu historial` : "Desde una biblioteca importada"; }
     if (options.recipe === "artists") { score = familiarity * 0.7 + affinity * 0.3; reason = track.minutes ? `${Math.round(track.minutes)} min de ${track.creator}` : `Canción de ${track.creator} aún no escuchada`; }
+    if (options.recipe === "timecapsule") { score = track.lastPlayed + familiarity * 1000; reason = track.lastPlayed ? `Escuchada ${new Date(track.lastPlayed).toLocaleDateString("es-ES")}` : "De tu etapa elegida"; }
     return { ...track, score, reason };
   }).sort((a, b) => b.score - a.score || a.key.localeCompare(b.key));
   const artistCount = new Map<string, number>();
@@ -81,7 +107,7 @@ export function recommendTracks(catalog: TrackChoice[], options: PlaylistOptions
     if (count >= options.maxPerArtist) continue;
     selected.push(track);
     artistCount.set(track.creator, count + 1);
-    if (selected.length >= options.count) break;
+    if (!options.allTracks && selected.length >= options.count) break;
   }
   const arranged: TrackChoice[] = [];
   const remaining = [...selected];
@@ -90,7 +116,11 @@ export function recommendTracks(catalog: TrackChoice[], options: PlaylistOptions
     const nextIndex = remaining.findIndex((track) => track.creator !== lastArtist);
     arranged.push(...remaining.splice(nextIndex < 0 ? 0 : nextIndex, 1));
   }
-  return arranged;
+  if (options.order === "ranking") return selected;
+  if (options.order === "recent") return selected.sort((a, b) => b.lastPlayed - a.lastPlayed);
+  if (options.order === "oldest") return selected.sort((a, b) => a.lastPlayed - b.lastPlayed);
+  if (options.order === "random") return selected.sort(() => Math.random() - .5);
+  return deduplicateTracks(arranged);
 }
 
 export function mixDiscoveredTracks(history: TrackChoice[], discoveries: TrackChoice[], options: PlaylistOptions): TrackChoice[] {
@@ -101,12 +131,14 @@ export function mixDiscoveredTracks(history: TrackChoice[], discoveries: TrackCh
   const add = (track: TrackChoice) => {
     const artist = (track.artistGroup ?? track.creator).toLowerCase();
     const key = track.uri || trackNameKey(track.creator, track.item);
-    const name = trackNameKey(track.creator, track.item);
-    if (selected.length >= options.count || excluded.has(artist) || excluded.has(track.creator.toLowerCase()) || seen.has(key) || seen.has(name) || (artistCounts.get(artist) ?? 0) >= options.maxPerArtist) return;
-    selected.push(track); seen.add(key); seen.add(name);
+    const identity = recordingKey(track);
+    const name = recordingKey({ ...track, isrc: undefined });
+    if ((!options.allTracks && selected.length >= options.count) || excluded.has(artist) || excluded.has(track.creator.toLowerCase()) || seen.has(key) || seen.has(identity) || seen.has(name) || (artistCounts.get(artist) ?? 0) >= options.maxPerArtist) return;
+    selected.push(track); seen.add(key); seen.add(identity); seen.add(name);
     artistCounts.set(artist, (artistCounts.get(artist) ?? 0) + 1);
   };
-  const newTarget = Math.ceil(options.count * options.novelty / 100);
+  const desired = options.allTracks ? Number.POSITIVE_INFINITY : options.count;
+  const newTarget = options.onlyUnheard ? desired : Math.ceil(desired * options.novelty / 100);
   const groups = new Map<string, TrackChoice[]>();
   discoveries.forEach((track) => {
     const artist = track.artistGroup ?? track.creator;
@@ -117,7 +149,7 @@ export function mixDiscoveredTracks(history: TrackChoice[], discoveries: TrackCh
   for (let index = 0; fresh.some((group) => index < group.length) && selected.length < newTarget; index += 1) {
     for (const group of fresh) { if (selected.length >= newTarget) break; if (group[index]) add(group[index]); }
   }
-  history.forEach(add);
+  if (!options.onlyUnheard) history.forEach(add);
   if (selected.length < options.count) discoveries.forEach(add);
-  return selected;
+  return deduplicateTracks(selected);
 }

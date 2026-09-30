@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCatalog, mixDiscoveredTracks, recommendTracks, type PlaylistOptions } from "./playlist";
+import { buildCatalog, deduplicateTracks, mixDiscoveredTracks, recommendTracks, type PlaylistOptions } from "./playlist";
 import type { LibraryTrack, Play } from "./types";
 
 const now = Date.UTC(2026, 8, 1);
@@ -10,6 +10,25 @@ describe("playlists basadas en escuchas", () => {
   it("permite 300 canciones y más de 10 del mismo artista", () => {
     const catalog = buildCatalog(Array.from({ length: 320 }, (_, index) => play(index)));
     expect(recommendTracks(catalog, options, now)).toHaveLength(300);
+  });
+
+  it("no impone límite cuando se elige toda la selección", () => {
+    const catalog = buildCatalog(Array.from({ length: 650 }, (_, index) => play(index)));
+    expect(recommendTracks(catalog, { ...options, count: 10, maxPerArtist: 10000, allTracks: true }, now)).toHaveLength(650);
+  });
+
+  it("agrupa la misma grabación aunque Spotify le asigne IDs diferentes", () => {
+    const first = { uri: "spotify:track:" + "1".repeat(22), item: "Mi canción", creator: "Artista", collection: "Álbum", sourceFile: "a", isrc: "ES-AAA-26-00001" };
+    const reissue = { ...first, uri: "spotify:track:" + "2".repeat(22), collection: "Deluxe", isrc: "ES-BBB-26-99999" };
+    expect(deduplicateTracks([first, reissue])).toEqual([first]);
+  });
+
+  it("detecta reediciones por título y artistas cuando falta el ISRC", () => {
+    const tracks = [
+      { uri: "spotify:track:" + "3".repeat(22), item: "Tema", creator: "Artista", collection: "", sourceFile: "a" },
+      { uri: "spotify:track:" + "4".repeat(22), item: "Tema (Remastered 2026)", creator: "Artista", collection: "", sourceFile: "b" },
+    ];
+    expect(deduplicateTracks(tracks)).toHaveLength(1);
   });
 
   it("limita la receta de artistas a los seleccionados", () => {

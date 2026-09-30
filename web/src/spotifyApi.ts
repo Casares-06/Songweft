@@ -3,7 +3,7 @@ const AUTHORIZE = "https://accounts.spotify.com/authorize";
 const TOKEN = "https://accounts.spotify.com/api/token";
 const API = "https://api.spotify.com/v1";
 import type { LibraryTrack } from "./types";
-import { trackNameKey } from "./playlist";
+import { deduplicateTracks, recordingKey, trackNameKey } from "./playlist";
 
 interface Session { clientId: string; accessToken?: string; refreshToken?: string; expiresAt?: number; verifier?: string; state?: string }
 
@@ -100,11 +100,12 @@ async function request(path: string, init: RequestInit = {}) {
   throw new Error("No se pudo completar la petición a Spotify.");
 }
 
-export async function createSpotifyPlaylist(name: string, uris: string[]) {
+export async function createSpotifyPlaylist(name: string, uris: string[], options: { description?: string; public?: boolean; onProgress?: (done: number, total: number) => void } = {}) {
   if (!uris.length) throw new Error("Ninguna canción tiene enlace de Spotify. Añade canciones identificadas antes de publicar.");
-  const playlist = await request("/me/playlists", { method: "POST", body: JSON.stringify({ name, public: false, description: "Creada con Songweft desde mi biblioteca musical" }) });
+  const playlist = await request("/me/playlists", { method: "POST", body: JSON.stringify({ name, public: options.public ?? false, description: options.description?.slice(0, 300) || "Creada con Songweft desde mi biblioteca musical" }) });
   for (let index = 0; index < uris.length; index += 100) {
     await request(`/playlists/${encodeURIComponent(playlist.id)}/items`, { method: "POST", body: JSON.stringify({ uris: uris.slice(index, index + 100) }) });
+    options.onProgress?.(Math.min(index + 100, uris.length), uris.length);
   }
   return playlist.external_urls?.spotify as string | undefined;
 }
@@ -116,9 +117,16 @@ export async function searchSpotifyTrack(item: string, creator: string): Promise
   return match?.uri ?? null;
 }
 
-function asLibraryTrack(entry: { uri?: string; name?: string; artists?: { name: string }[]; album?: { name: string } }, sourceFile: string): LibraryTrack | null {
+export async function getSpotifyTrack(uriOrUrl: string): Promise<LibraryTrack | null> {
+  const match = uriOrUrl.match(/(?:open\.spotify\.com\/track\/|spotify:track:)([A-Za-z0-9]{22})/);
+  if (!match) return null;
+  const entry = await request(`/tracks/${match[1]}`);
+  return asLibraryTrack(entry, "Spotify · Añadida manualmente");
+}
+
+function asLibraryTrack(entry: { uri?: string; name?: string; artists?: { name: string }[]; album?: { name: string; release_date?: string; album_type?: "album" | "single" | "compilation" }; external_ids?: { isrc?: string } }, sourceFile: string): LibraryTrack | null {
   if (!entry.uri?.startsWith("spotify:track:") || !entry.name || !entry.artists?.length) return null;
-  return { uri: entry.uri, item: entry.name, creator: entry.artists.map((artist) => artist.name).join(", "), collection: entry.album?.name ?? "", sourceFile };
+  return { uri: entry.uri, item: entry.name, creator: entry.artists.map((artist) => artist.name).join(", "), collection: entry.album?.name ?? "", sourceFile, isrc: entry.external_ids?.isrc, releaseDate: entry.album?.release_date, albumType: entry.album?.album_type };
 }
 
 export async function importSavedSpotifyTracks(onProgress?: (message: string) => void): Promise<LibraryTrack[]> {
@@ -161,29 +169,44 @@ export async function searchSpotifyArtists(query: string): Promise<{ id: string;
   return (found.artists?.items ?? []).map((artist: { id: string; name: string }) => ({ id: artist.id, name: artist.name }));
 }
 
-export async function exploreArtistCatalog(artistName: string, knownUris: Set<string>, knownNames = new Set<string>(), artistId?: string, maxTracks = 24): Promise<LibraryTrack[]> {
+export interface ArtistCatalogOptions {
+  groups?: Array<"album" | "single" | "appears_on" | "compilation">;
+  includeKnown?: boolean;
+  maxTracks?: number;
+  onProgress?: (message: string) => void;
+}
+
+export async function exploreArtistCatalog(artistName: string, knownUris: Set<string>, knownNames = new Set<string>(), artistId?: string, maxTracksOrOptions: number | ArtistCatalogOptions = 24): Promise<LibraryTrack[]> {
   const found = artistId ? null : await request(`/search?q=${encodeURIComponent(`artist:${artistName}`)}&type=artist&limit=5`);
   const artist = artistId ? { id: artistId } : found.artists?.items?.find((item: { name: string }) => item.name.toLowerCase() === artistName.toLowerCase());
   if (!artist) throw new Error(`No se encontró a ${artistName} en Spotify.`);
+  const options: ArtistCatalogOptions = typeof maxTracksOrOptions === "number" ? { maxTracks: maxTracksOrOptions } : maxTracksOrOptions;
   const suggestions: LibraryTrack[] = [];
   const seen = new Set<string>();
-  const target = Math.min(300, Math.max(1, maxTracks));
-  for (let albumOffset = 0; albumOffset < 100; albumOffset += 20) {
-    const albums = await request(`/artists/${artist.id}/albums?include_groups=album,single&limit=20&offset=${albumOffset}`);
+  const seenAlbums = new Set<string>();
+  const target = options.maxTracks === undefined ? 24 : options.maxTracks <= 0 || !Number.isFinite(options.maxTracks) ? Number.POSITIVE_INFINITY : options.maxTracks;
+  const groups = options.groups?.length ? options.groups.join(",") : "album,single,appears_on,compilation";
+  for (let albumOffset = 0; albumOffset < 1000; albumOffset += 20) {
+    options.onProgress?.(`Explorando ${artistName}: ${suggestions.length} canciones…`);
+    const albums = await request(`/artists/${artist.id}/albums?include_groups=${groups}&limit=20&offset=${albumOffset}`);
     for (const album of albums.items ?? []) {
+      if (seenAlbums.has(album.id)) continue;
+      seenAlbums.add(album.id);
       let trackOffset = 0;
       while (true) {
         const page = await request(`/albums/${album.id}/tracks?limit=50&offset=${trackOffset}`);
         for (const entry of page.items ?? []) {
           if (!entry.artists?.some((credit: { id: string }) => credit.id === artist.id)) continue;
-          const track = asLibraryTrack({ ...entry, album: { name: album.name } }, "Spotify · Discografía");
+          const track = asLibraryTrack({ ...entry, album: { name: album.name, release_date: album.release_date, album_type: album.album_type } }, "Spotify · Discografía");
           if (!track) continue;
           const nameKey = trackNameKey(artistName, track.item);
           const heardByName = knownNames.has(nameKey) || entry.artists.some((credit: { name: string }) => knownNames.has(trackNameKey(credit.name, track.item)));
-          if (knownUris.has(track.uri) || heardByName || seen.has(track.uri) || seen.has(nameKey)) continue;
-          seen.add(track.uri); seen.add(nameKey);
+          const identity = recordingKey(track);
+          const byName = recordingKey({ ...track, isrc: undefined });
+          if ((!options.includeKnown && (knownUris.has(track.uri) || heardByName)) || seen.has(track.uri) || seen.has(identity) || seen.has(byName)) continue;
+          seen.add(track.uri); seen.add(identity); seen.add(byName);
           suggestions.push(track);
-          if (suggestions.length >= target) return suggestions;
+          if (suggestions.length >= target) return hydrateTrackIds(deduplicateTracks(suggestions));
         }
         if (!page.next || !page.items?.length) break;
         trackOffset += page.items.length;
@@ -191,5 +214,17 @@ export async function exploreArtistCatalog(artistName: string, knownUris: Set<st
     }
     if (!albums.next || !albums.items?.length) break;
   }
-  return suggestions;
+  return hydrateTrackIds(deduplicateTracks(suggestions));
+}
+
+async function hydrateTrackIds(tracks: LibraryTrack[]) {
+  const hydrated: LibraryTrack[] = [];
+  for (let index = 0; index < tracks.length; index += 50) {
+    const slice = tracks.slice(index, index + 50);
+    const ids = slice.map((track) => track.uri.split(":").at(-1)).filter(Boolean).join(",");
+    const response = ids ? await request(`/tracks?ids=${encodeURIComponent(ids)}`) : { tracks: [] };
+    const byUri = new Map((response.tracks ?? []).filter(Boolean).map((entry: { uri: string }) => [entry.uri, entry]));
+    for (const fallback of slice) hydrated.push(asLibraryTrack((byUri.get(fallback.uri) as Parameters<typeof asLibraryTrack>[0]) ?? fallback, fallback.sourceFile) ?? fallback);
+  }
+  return deduplicateTracks(hydrated);
 }

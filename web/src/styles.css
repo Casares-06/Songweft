@@ -337,8 +337,49 @@ td strong { color: #f1f1f4; }
 .connection-panel .primary-button { flex: 0 0 auto; }
 .connection-caveat { font-size: .82rem; }
 .studio-layout { display: grid; grid-template-columns: minmax(280px, 350px) minmax(0, 1fr); gap: 1rem; align-items: start; }
+.studio-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: .5rem; margin: 0 0 1rem; }
+.studio-steps button { display: flex; align-items: center; justify-content: center; gap: .55rem; min-width: 0; padding: .75rem; border: 1px solid #30303b; border-radius: .8rem; color: var(--muted); background: #15151c; font-weight: 750; }
+.studio-steps button span { display: grid; place-items: center; width: 1.55rem; height: 1.55rem; flex: 0 0 auto; border-radius: 50%; background: #292934; font-size: .72rem; }
+.studio-steps button.active { color: #101014; border-color: var(--accent); background: var(--accent); }
+.studio-steps button.active span { color: var(--accent); background: #111; }
+.studio-steps button.done { color: var(--accent); border-color: #d8ff3e55; }
 .studio-controls { position: sticky; top: 92px; }
 .studio-controls h2 { margin-top: 0; }
+.studio-step { min-height: 430px; }
+.studio-step h2 { margin: .45rem 0; }
+.step-copy { color: var(--muted); font-size: .83rem; line-height: 1.55; margin: 0 0 1.2rem; }
+.step-actions { display: flex; justify-content: space-between; gap: .6rem; margin-top: 1.2rem; }
+.step-actions > button:not(.primary-button), .advanced-toggle { border: 1px solid #41414c; border-radius: .65rem; padding: .7rem .85rem; color: #ddd; background: #202028; }
+.step-actions .primary-button { margin-left: auto; }
+.choice-cards { display: grid; grid-template-columns: 1fr 1fr; gap: .55rem; margin: 1rem 0; }
+.choice-cards button { text-align: left; border: 1px solid #373742; border-radius: .8rem; padding: .8rem; color: #eee; background: #191920; }
+.choice-cards button.selected { border-color: var(--accent); background: #d8ff3e10; }
+.choice-cards strong, .choice-cards small { display: block; }
+.choice-cards small { color: var(--muted); margin-top: .3rem; line-height: 1.35; }
+.catalog-groups { display: grid; grid-template-columns: 1fr 1fr; gap: .15rem .5rem; margin: 1rem 0; border: 1px solid #343440; border-radius: .8rem; padding: .75rem; }
+.catalog-groups legend { padding: 0 .3rem; color: var(--muted); font-size: .75rem; }
+.catalog-groups label { display: flex; align-items: center; gap: .45rem; margin: .25rem 0; }
+.advanced-toggle { width: 100%; margin-top: .5rem; }
+.advanced-panel { margin-top: .6rem; padding: .75rem; border: 1px solid #343440; border-radius: .8rem; background: #0f0f15; }
+.advanced-panel p { color: var(--muted); font-size: .75rem; line-height: 1.45; }
+.artist-search { display: flex; align-items: center; gap: .45rem; min-width: 0; border: 1px solid #383844; border-radius: .7rem; padding: 0 .7rem; color: var(--muted); background: #17171f; }
+.artist-search input { width: 100%; border: 0 !important; padding-inline: .2rem !important; background: transparent !important; }
+.spotify-results a { margin-left: auto; color: var(--accent); }
+.selection-summary { display: flex; align-items: baseline; gap: .45rem; margin: .7rem 0; }
+.selection-summary strong { color: var(--accent); font-size: 1.6rem; }
+.selection-summary span { color: var(--muted); font-size: .8rem; }
+.review-numbers { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; margin: 1rem 0; }
+.review-numbers div { padding: .7rem; border: 1px solid #32323c; border-radius: .7rem; background: #191920; }
+.review-numbers strong, .review-numbers span { display: block; }
+.review-numbers strong { color: var(--accent); font-size: 1.25rem; }
+.review-numbers span { color: var(--muted); font-size: .65rem; line-height: 1.3; }
+.playlist-meta { display: grid; grid-template-columns: 1fr 1.4fr; gap: .65rem; }
+.playlist-meta label { display: grid; gap: .35rem; color: var(--muted); font-size: .75rem; }
+.playlist-meta input { min-width: 0; padding: .7rem; border: 1px solid #393944; border-radius: .65rem; color: #fff; background: #17171f; }
+.preview-toolbar { display: flex; flex-wrap: wrap; gap: .4rem; margin: 1rem 0; }
+.preview-toolbar .artist-search { flex: 1 1 220px; }
+.preview-toolbar > button { display: inline-flex; align-items: center; gap: .3rem; padding: .55rem .65rem; border: 1px solid #383843; border-radius: .6rem; color: #ccc; background: #1a1a21; font-size: .72rem; }
+.empty-playlist { min-height: 220px; display: grid; place-items: center; color: var(--muted); text-align: center; }
 .recipe-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .55rem; margin-bottom: 1.5rem; }
 .recipe-grid button { text-align: left; border: 1px solid #30303c; background: #17171e; color: #eeeef2; border-radius: .8rem; padding: .8rem; min-height: 95px; }
 .recipe-grid button.selected { border-color: var(--accent); background: #d8ff3e12; }
@@ -425,7 +466,7 @@ td strong { color: #f1f1f4; }
 .pasted-source textarea { max-width: 800px; }
 @media (max-width: 1050px) { .studio-layout { grid-template-columns: 1fr; } .studio-controls { position: static; } }
 @media (max-width: 750px) { .wrapped-layout { grid-template-columns: 1fr; } .connection-panel { flex-direction: column; align-items: flex-start; } }
-@media (max-width: 560px) { .studio-track { grid-template-columns: 1.5rem minmax(0, 1fr); } .studio-track-actions { grid-column: 2; } .studio-footer .primary-button { width: 100%; margin: .5rem 0 0; } .sources-panel { flex-direction: column; } }
+@media (max-width: 560px) { .studio-steps { grid-template-columns: 1fr 1fr; } .studio-steps button { justify-content: flex-start; } .choice-cards, .playlist-meta { grid-template-columns: 1fr; } .studio-track { grid-template-columns: 1.5rem minmax(0, 1fr); } .studio-track-actions { grid-column: 2; } .studio-footer .primary-button { width: 100%; margin: .5rem 0 0; } .sources-panel { flex-direction: column; } }
 
 .home-hero { display: flex; align-items: center; justify-content: space-between; gap: 2rem; padding: clamp(2rem, 5vw, 4rem); margin-bottom: 1rem; border: 1px solid #343348; border-radius: 1.5rem; background: radial-gradient(circle at 85% 40%, #8b5cf645, transparent 38%), linear-gradient(120deg, #191923, #101018); overflow: hidden; }
 .home-hero > div { display: grid; gap: .4rem; }
